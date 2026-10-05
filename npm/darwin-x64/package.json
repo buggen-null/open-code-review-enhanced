@@ -1,6 +1,6 @@
 {
   "name": "open-code-review-enhanced-darwin-x64",
-  "version": "1.1.25-test",
+  "version": "1.1.26-test",
   "description": "Platform binary for open-code-review (darwin x64)",
   "os": [
     "darwin"
