@@ -1,6 +1,6 @@
 {
   "name": "open-code-review-enhanced",
-  "version": "1.1.26-test",
+  "version": "1.1.27-test",
   "description": "OpenCodeReview CLI — AI-powered code review tool",
   "bin": {
     "ocr": "bin/ocr.js"
@@ -25,7 +25,8 @@
     "docs/release-notes-1.1.23-test.md",
     "docs/release-notes-1.1.24-test.md",
     "docs/release-notes-1.1.25-test.md",
-    "docs/release-notes-1.1.26-test.md"
+    "docs/release-notes-1.1.26-test.md",
+    "docs/release-notes-1.1.27-test.md"
   ],
   "scripts": {
     "postinstall": "node scripts/install.js",
@@ -47,12 +48,12 @@
     "checksumPattern": "https://github.com/Jaye-Tao/open-code-review-enhanced/releases/download/v{version}/sha256sum.txt"
   },
   "optionalDependencies": {
-    "open-code-review-enhanced-darwin-arm64": "1.1.26-test",
-    "open-code-review-enhanced-darwin-x64": "1.1.26-test",
-    "open-code-review-enhanced-linux-arm64": "1.1.26-test",
-    "open-code-review-enhanced-linux-x64": "1.1.26-test",
-    "open-code-review-enhanced-win32-arm64": "1.1.26-test",
-    "open-code-review-enhanced-win32-x64": "1.1.26-test"
+    "open-code-review-enhanced-darwin-arm64": "1.1.27-test",
+    "open-code-review-enhanced-darwin-x64": "1.1.27-test",
+    "open-code-review-enhanced-linux-arm64": "1.1.27-test",
+    "open-code-review-enhanced-linux-x64": "1.1.27-test",
+    "open-code-review-enhanced-win32-arm64": "1.1.27-test",
+    "open-code-review-enhanced-win32-x64": "1.1.27-test"
   },
   "engines": {
     "node": ">=14"
