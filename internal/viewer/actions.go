@@ -20,6 +20,9 @@ import (
 func handleDeleteSession(w http.ResponseWriter, r *http.Request, root, repo, id string) {
 	origin, err := url.Parse(r.Header.Get("Origin"))
 	scheme, host := requestOriginTarget(r)
+	if host == "" || (r.Header.Get("X-Forwarded-Host") == "" && r.Header.Get("X-Forwarded-Prefix") != "" && origin != nil) {
+		host = origin.Host
+	}
 	if err != nil || origin.Scheme != scheme || origin.Host != host || origin.User != nil || origin.Path != "" || r.Header.Get("X-OCR-Confirm") != "delete" {
 		http.Error(w, "same-origin deletion confirmation required", http.StatusForbidden)
 		return
@@ -67,6 +70,9 @@ func handleDeleteRepository(w http.ResponseWriter, r *http.Request, root, repo s
 func sameOriginDelete(r *http.Request) bool {
 	origin, err := url.Parse(r.Header.Get("Origin"))
 	scheme, host := requestOriginTarget(r)
+	if host == "" || (r.Header.Get("X-Forwarded-Host") == "" && r.Header.Get("X-Forwarded-Prefix") != "" && origin != nil) {
+		host = origin.Host
+	}
 	return err == nil && origin.Scheme == scheme && origin.Host == host && origin.User == nil && origin.Path == "" && r.Header.Get("X-OCR-Confirm") == "delete"
 }
 

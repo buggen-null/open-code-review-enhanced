@@ -2125,6 +2125,23 @@ nav.breadcrumb a:focus-visible {
 .session-header h2, .compare-page .meta, .action-status { overflow-wrap: anywhere; }
 .col-action { white-space: nowrap; }
 .col-action a, .col-action button { margin-right: 8px; }
+.sessions-page .col-action,
+.repos-page .col-action,
+.tasks-page .task-actions {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    background: var(--surface);
+    box-shadow: -8px 0 12px -12px var(--shadow-color, #000);
+}
+.sessions-page th.col-action,
+.repos-page th.col-action,
+.tasks-page th:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 3;
+    background: var(--surface-alt);
+}
 .action-status { position: sticky; bottom: 0; background: var(--surface); padding: 8px; }
 .action-status:empty { display: none; }
 .clipboard-input { position: fixed; left: -10000px; }
