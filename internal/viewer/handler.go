@@ -99,7 +99,8 @@ func handleRepos(w http.ResponseWriter, r *http.Request, root string) {
 	}
 
 	renderTemplate(w, "repos.html", map[string]any{
-		"Repos": repos,
+		"Repos":      repos,
+		"PathPrefix": forwardedPathPrefix(r),
 	})
 }
 

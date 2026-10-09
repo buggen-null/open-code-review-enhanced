@@ -24,7 +24,7 @@ import (
 	"unicode"
 )
 
-const defaultReviewLimit = 2
+const defaultReviewLimit = 5
 
 func configuredReviewLimit() int {
 	value := strings.TrimSpace(os.Getenv("OCR_VIEWER_MAX_RUNNING_REVIEWS"))
@@ -263,6 +263,12 @@ func (q *reviewQueue) update(id, status, sessionID, message string) {
 		if q.items[i].ID != id {
 			continue
 		}
+		// Cancellation is terminal. The worker may observe context cancellation
+		// slightly after the request has marked the item cancelled, so prevent
+		// late progress or success updates from resurrecting it.
+		if q.items[i].Status == "cancelled" {
+			return
+		}
 		q.items[i].Status = status
 		q.items[i].SessionID = sessionID
 		q.items[i].Error = message
@@ -295,7 +301,6 @@ func (q *reviewQueue) cancel(id string) bool {
 		}
 		if cancel := q.active[id]; cancel != nil && (q.items[i].Status == "preparing" || q.items[i].Status == "fetching" || q.items[i].Status == "running") {
 			cancel()
-			delete(q.active, id)
 			q.items[i].Status = "cancelled"
 			q.items[i].FinishedAt = time.Now()
 			q.reindexLocked()
@@ -323,6 +328,11 @@ func (q *reviewQueue) remove(id string) bool {
 }
 
 func (q *reviewQueue) run(ctx context.Context, item ReviewSubmission) {
+	defer func() {
+		q.mu.Lock()
+		delete(q.active, item.ID)
+		q.mu.Unlock()
+	}()
 	fail := func(err error) {
 		if errors.Is(ctx.Err(), context.Canceled) {
 			return
@@ -477,11 +487,14 @@ func handleReviewSubmissions(w http.ResponseWriter, r *http.Request, q *reviewQu
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	redirectPath := "/tasks"
-	if prefix := strings.TrimRight(strings.TrimSpace(r.Header.Get("X-Forwarded-Prefix")), "/"); strings.HasPrefix(prefix, "/") {
-		redirectPath = prefix + redirectPath
+	http.Redirect(w, r, tasksRedirectPath(r), http.StatusSeeOther)
+}
+
+func tasksRedirectPath(r *http.Request) string {
+	if prefix := forwardedPathPrefix(r); prefix != "" {
+		return prefix + "/tasks"
 	}
-	http.Redirect(w, r, redirectPath, http.StatusSeeOther)
+	return "/tasks"
 }
 
 func handleCancelReviewSubmission(w http.ResponseWriter, r *http.Request, q *reviewQueue, id string) {
@@ -490,7 +503,7 @@ func handleCancelReviewSubmission(w http.ResponseWriter, r *http.Request, q *rev
 		http.Error(w, "task cannot be cancelled", http.StatusConflict)
 		return
 	}
-	http.Redirect(w, r, "/submissions", http.StatusSeeOther)
+	http.Redirect(w, r, tasksRedirectPath(r), http.StatusSeeOther)
 }
 
 func handleDeleteReviewSubmission(w http.ResponseWriter, r *http.Request, q *reviewQueue, id string) {
@@ -499,11 +512,7 @@ func handleDeleteReviewSubmission(w http.ResponseWriter, r *http.Request, q *rev
 		http.Error(w, "任务只能在结束后删除", http.StatusConflict)
 		return
 	}
-	path := "/tasks"
-	if prefix := forwardedPathPrefix(r); prefix != "" {
-		path = prefix + path
-	}
-	http.Redirect(w, r, path, http.StatusSeeOther)
+	http.Redirect(w, r, tasksRedirectPath(r), http.StatusSeeOther)
 }
 
 func sameOriginRequest(r *http.Request) bool {

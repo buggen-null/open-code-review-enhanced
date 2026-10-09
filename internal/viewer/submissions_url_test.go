@@ -3,7 +3,18 @@
 
 package viewer
 
-import "testing"
+import (
+	"net/http/httptest"
+	"testing"
+)
+
+func TestTasksRedirectPathKeepsProxyPrefix(t *testing.T) {
+	r := httptest.NewRequest("POST", "http://viewer/code-audit/submissions/id/cancel", nil)
+	r.Header.Set("X-Forwarded-Prefix", "/code-audit/")
+	if got := tasksRedirectPath(r); got != "/code-audit/tasks" {
+		t.Fatalf("tasksRedirectPath() = %q, want /code-audit/tasks", got)
+	}
+}
 
 func TestValidGitURL(t *testing.T) {
 	for _, raw := range []string{
