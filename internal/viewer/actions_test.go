@@ -61,6 +61,21 @@ func TestDeleteSession(t *testing.T) {
 	}
 }
 
+func TestDeleteSessionUsesForwardedOrigin(t *testing.T) {
+	root := compareFixture(t)
+	req := httptest.NewRequest(http.MethodDelete, "/r/myrepo/s1/delete", nil)
+	req.Host = "127.0.0.1:8200"
+	req.Header.Set("Origin", "https://review.example.com")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "review.example.com")
+	req.Header.Set("X-OCR-Confirm", "delete")
+	rr := httptest.NewRecorder()
+	newMux(root).ServeHTTP(rr, req)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestSessionActionTraversal(t *testing.T) {
 	mux := newMux(compareFixture(t))
 	for _, path := range []string{"/r/myrepo/..%5Coutside/delete", "/r/myrepo/C%3Aoutside/delete", "/r/..%5Coutside/s1/export.md"} {

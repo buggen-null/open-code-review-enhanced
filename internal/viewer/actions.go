@@ -12,17 +12,15 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Session mutations require an explicit same-origin browser request. The custom
 // header prevents cross-origin forms from deleting local review records.
 func handleDeleteSession(w http.ResponseWriter, r *http.Request, root, repo, id string) {
 	origin, err := url.Parse(r.Header.Get("Origin"))
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	if err != nil || origin.Scheme != scheme || origin.Host != r.Host || origin.User != nil || origin.Path != "" || r.Header.Get("X-OCR-Confirm") != "delete" {
+	scheme, host := requestOriginTarget(r)
+	if err != nil || origin.Scheme != scheme || origin.Host != host || origin.User != nil || origin.Path != "" || r.Header.Get("X-OCR-Confirm") != "delete" {
 		http.Error(w, "same-origin deletion confirmation required", http.StatusForbidden)
 		return
 	}
@@ -68,11 +66,23 @@ func handleDeleteRepository(w http.ResponseWriter, r *http.Request, root, repo s
 
 func sameOriginDelete(r *http.Request) bool {
 	origin, err := url.Parse(r.Header.Get("Origin"))
+	scheme, host := requestOriginTarget(r)
+	return err == nil && origin.Scheme == scheme && origin.Host == host && origin.User == nil && origin.Path == "" && r.Header.Get("X-OCR-Confirm") == "delete"
+}
+
+func requestOriginTarget(r *http.Request) (string, string) {
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	return err == nil && origin.Scheme == scheme && origin.Host == r.Host && origin.User == nil && origin.Path == "" && r.Header.Get("X-OCR-Confirm") == "delete"
+	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]); forwarded == "http" || forwarded == "https" {
+		scheme = forwarded
+	}
+	host := r.Host
+	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0]); forwarded != "" {
+		host = forwarded
+	}
+	return scheme, host
 }
 
 func handleMarkdown(w http.ResponseWriter, r *http.Request, root, repo, id string) {

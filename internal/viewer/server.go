@@ -155,9 +155,7 @@ func (w *prefixResponseWriter) flush() {
 	contentType := w.header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "text/html") {
 		body := string(w.body)
-		for _, attribute := range []string{`href="/`, `src="/`, `action="/`} {
-			body = strings.ReplaceAll(body, attribute, attribute[:len(attribute)-1]+w.prefix+"/")
-		}
+		body = prefixRootRelativeURLs(body, w.prefix)
 		w.body = []byte(body)
 	}
 	for key, values := range w.header {
@@ -168,6 +166,28 @@ func (w *prefixResponseWriter) flush() {
 		w.dst.WriteHeader(w.status)
 	}
 	_, _ = w.dst.Write(w.body)
+}
+
+func prefixRootRelativeURLs(body, prefix string) string {
+	for _, attribute := range []string{`href="/`, `src="/`, `action="/`} {
+		needle := attribute
+		replacement := attribute[:len(attribute)-1] + prefix + "/"
+		for start := 0; ; {
+			i := strings.Index(body[start:], needle)
+			if i < 0 {
+				break
+			}
+			i += start
+			pathStart := i + len(needle)
+			if strings.HasPrefix(body[pathStart:], strings.TrimPrefix(prefix, "/")+"/") {
+				start = pathStart
+				continue
+			}
+			body = body[:i] + replacement + body[pathStart:]
+			start = i + len(replacement)
+		}
+	}
+	return body
 }
 
 // newMux builds method-qualified document and action routes. Only the explicit

@@ -44,6 +44,14 @@ func TestForwardedPrefixHTMLLeavesUnprefixedResponsesUntouched(t *testing.T) {
 	}
 }
 
+func TestPrefixRootRelativeURLsDoesNotDuplicatePrefix(t *testing.T) {
+	got := prefixRootRelativeURLs(`<a href="/code-audit/r/repo"><img src="/static/app.js">`, "/code-audit")
+	want := `<a href="/code-audit/r/repo"><img src="/code-audit/static/app.js">`
+	if got != want {
+		t.Fatalf("prefixRootRelativeURLs() = %q, want %q", got, want)
+	}
+}
+
 func TestForwardedPrefixHTMLPrefixesRenderedRepositoryLinksOnce(t *testing.T) {
 	root := t.TempDir()
 	repoDir := filepath.Join(root, "repo")
