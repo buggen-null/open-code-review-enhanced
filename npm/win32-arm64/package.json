@@ -1,6 +1,6 @@
 {
   "name": "open-code-review-enhanced-win32-arm64",
-  "version": "1.1.27-test",
+  "version": "1.1.28-test",
   "description": "Platform binary for open-code-review (win32 arm64)",
   "os": [
     "win32"
