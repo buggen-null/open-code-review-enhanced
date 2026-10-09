@@ -1696,7 +1696,8 @@ nav.breadcrumb a:focus-visible {
 }
 .table a:focus-visible,
 .sessions-page .table-scroll:focus-visible,
-.repos-page .table-scroll:focus-visible {
+.repos-page .table-scroll:focus-visible,
+.tasks-page .table-scroll:focus-visible {
     outline: 2px solid var(--link);
     outline-offset: -2px;
 }
@@ -2182,7 +2183,14 @@ h1 { margin: 0; font-size: clamp(1.35rem, 2vw, 1.8rem); letter-spacing: -.02em; 
 .submission-failure p { margin: .35rem 0 0; overflow-wrap: anywhere; line-height: 1.4; }
 
 .submissions-table .inline-form { display: inline-block; margin: 0; }
-.submissions-table { min-width: 76rem; table-layout: fixed; }
+.tasks-page .table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+}
+.submissions-table { min-width: 101rem; table-layout: fixed; }
 .submissions-table th:nth-child(1) { width: 7rem; }
 .submissions-table th:nth-child(2) { width: 11rem; }
 .submissions-table th:nth-child(3),
@@ -2192,6 +2200,7 @@ h1 { margin: 0; font-size: clamp(1.35rem, 2vw, 1.8rem); letter-spacing: -.02em; 
 .submissions-table th:nth-child(7) { width: 9rem; }
 .submissions-table th:nth-child(8) { width: 7rem; }
 .submissions-table th:nth-child(9) { width: 13rem; }
+.submissions-table th:nth-child(10) { width: 11rem; }
 .submissions-table td { overflow-wrap: anywhere; word-break: break-word; }
 .submissions-table td:nth-child(1),
 .submissions-table td:nth-child(6),

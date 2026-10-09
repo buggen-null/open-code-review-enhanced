@@ -6,6 +6,9 @@ package viewer
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -14,7 +17,7 @@ func TestForwardedPrefixHTML(t *testing.T) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write([]byte(`<link href="/static/style.css"><a href="/r/repo">repo</a>`))
 	})
-	req := httptest.NewRequest(http.MethodGet, "http://viewer/code-audit/", nil)
+	req := httptest.NewRequest(http.MethodGet, "http://viewer/", nil)
 	req.Header.Set("X-Forwarded-Prefix", "/code-audit")
 	rec := httptest.NewRecorder()
 
@@ -38,5 +41,31 @@ func TestForwardedPrefixHTMLLeavesUnprefixedResponsesUntouched(t *testing.T) {
 
 	if got := rec.Body.String(); got != `<script src="/static/app.js"></script>` {
 		t.Fatalf("body = %q, want root-relative asset URL", got)
+	}
+}
+
+func TestForwardedPrefixHTMLPrefixesRenderedRepositoryLinksOnce(t *testing.T) {
+	root := t.TempDir()
+	repoDir := filepath.Join(root, "repo")
+	if err := os.MkdirAll(repoDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "session.jsonl"), []byte(`{"type":"session_start"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://viewer/", nil)
+	req.Header.Set("X-Forwarded-Prefix", "/code-audit")
+	rec := httptest.NewRecorder()
+	forwardedPrefixHTML(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handleRepos(w, r, root)
+	})).ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="/code-audit/r/repo"`) {
+		t.Fatalf("repository link was not prefixed: %s", body)
+	}
+	if strings.Contains(body, "/code-audit/code-audit/") {
+		t.Fatalf("repository link contains a duplicated prefix: %s", body)
 	}
 }

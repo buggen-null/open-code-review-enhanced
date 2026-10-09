@@ -98,10 +98,7 @@ func handleRepos(w http.ResponseWriter, r *http.Request, root string) {
 		return
 	}
 
-	renderTemplate(w, "repos.html", map[string]any{
-		"Repos":      repos,
-		"PathPrefix": forwardedPathPrefix(r),
-	})
+	renderTemplate(w, "repos.html", map[string]any{"Repos": repos})
 }
 
 type sessionsData struct {

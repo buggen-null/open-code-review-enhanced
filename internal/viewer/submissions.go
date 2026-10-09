@@ -461,7 +461,7 @@ func handleReviewSubmissions(w http.ResponseWriter, r *http.Request, q *reviewQu
 	setNoStore(w)
 	if r.Method == http.MethodGet {
 		if r.URL.Path == "/submit" || r.URL.Path == "/submissions" {
-			renderTemplate(w, "submit.html", map[string]any{"RepoRoot": q.repoRoot, "GitURL": r.URL.Query().Get("git_url"), "RepoDir": r.URL.Query().Get("repo_dir"), "TargetBranch": r.URL.Query().Get("target_branch"), "BaseBranch": r.URL.Query().Get("base_branch"), "SubmittedBy": r.URL.Query().Get("submitted_by"), "ResumeSessionID": r.URL.Query().Get("resume_session_id"), "ExtraPrompt": r.URL.Query().Get("extra_prompt"), "DefaultPrompt": r.URL.Query().Get("default_prompt") == "1"})
+			renderTemplate(w, "submit.html", map[string]any{"RepoRoot": q.repoRoot, "GitURL": r.URL.Query().Get("git_url"), "RepoDir": r.URL.Query().Get("repo_dir"), "TargetBranch": r.URL.Query().Get("target_branch"), "BaseBranch": r.URL.Query().Get("base_branch"), "SubmittedBy": r.URL.Query().Get("submitted_by"), "ResumeSessionID": r.URL.Query().Get("resume_session_id"), "ExtraPrompt": r.URL.Query().Get("extra_prompt"), "DefaultPrompt": r.URL.Query().Get("default_prompt") != "0"})
 			return
 		}
 		items := q.snapshot()
