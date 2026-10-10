@@ -20,7 +20,7 @@ import (
 func handleDeleteSession(w http.ResponseWriter, r *http.Request, root, repo, id string) {
 	origin, err := url.Parse(r.Header.Get("Origin"))
 	scheme, host := requestOriginTarget(r)
-	if host == "" || (r.Header.Get("X-Forwarded-Host") == "" && err == nil && origin.Host != "" && isPrivateProxyHost(r.Host)) {
+	if shouldUseOriginHost(r, origin, host) {
 		host = origin.Host
 	}
 	if err != nil || origin.Scheme != scheme || origin.Host != host || origin.User != nil || origin.Path != "" || r.Header.Get("X-OCR-Confirm") != "delete" {
@@ -70,10 +70,22 @@ func handleDeleteRepository(w http.ResponseWriter, r *http.Request, root, repo s
 func sameOriginDelete(r *http.Request) bool {
 	origin, err := url.Parse(r.Header.Get("Origin"))
 	scheme, host := requestOriginTarget(r)
-	if host == "" || (r.Header.Get("X-Forwarded-Host") == "" && err == nil && origin.Host != "" && isPrivateProxyHost(r.Host)) {
+	if shouldUseOriginHost(r, origin, host) {
 		host = origin.Host
 	}
 	return err == nil && origin.Scheme == scheme && origin.Host == host && origin.User == nil && origin.Path == "" && r.Header.Get("X-OCR-Confirm") == "delete"
+}
+
+func shouldUseOriginHost(r *http.Request, origin *url.URL, host string) bool {
+	if origin == nil || origin.Host == "" || r.Header.Get("X-Forwarded-Host") != "" {
+		return false
+	}
+	// Nginx deployments commonly forward only the scheme and mount prefix. In
+	// that mode the browser Origin is the authoritative public host.
+	if r.Header.Get("X-Forwarded-Prefix") != "" {
+		return true
+	}
+	return host == "" || isPrivateProxyHost(r.Host)
 }
 
 func isPrivateProxyHost(host string) bool {

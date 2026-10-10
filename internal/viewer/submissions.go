@@ -317,7 +317,7 @@ func (q *reviewQueue) cancel(id string) bool {
 			cancel()
 			q.items[i].Status = "cancelled"
 			q.items[i].FinishedAt = time.Now()
-			finalizeOrphanedSession(filepath.Join(q.repoRoot, "..", "sessions"), q.items[i].SessionID)
+			finalizeOrphanedSessionForRepo(filepath.Join(q.repoRoot, "..", "sessions"), q.items[i].RepoDir, q.items[i].SessionID)
 			q.reindexLocked()
 			_ = q.persistLocked()
 			return true
@@ -360,7 +360,7 @@ func (q *reviewQueue) run(ctx context.Context, item ReviewSubmission) {
 					message = "审核任务被取消"
 				}
 				q.update(item.ID, "failed", item.SessionID, message)
-				finalizeOrphanedSession(filepath.Join(q.repoRoot, "..", "sessions"), item.SessionID)
+				finalizeOrphanedSessionForRepo(filepath.Join(q.repoRoot, "..", "sessions"), item.RepoDir, item.SessionID)
 			}
 		}
 		q.mu.Lock()
@@ -477,6 +477,54 @@ func finalizeOrphanedSession(root, sessionID string) {
 		_, _ = f.Write(append(payload, '\n'))
 		_ = f.Close()
 		return
+	}
+}
+
+// finalizeOrphanedSessionForRepo recovers the session ID when an interrupted
+// reviewer never returned its JSON result to the queue.
+func finalizeOrphanedSessionForRepo(root, repoDir, sessionID string) {
+	if sessionID != "" {
+		finalizeOrphanedSession(root, sessionID)
+		return
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+	var newestID string
+	var newestTime time.Time
+	for _, dir := range entries {
+		if !dir.IsDir() {
+			continue
+		}
+		files, err := os.ReadDir(filepath.Join(root, dir.Name()))
+		if err != nil {
+			continue
+		}
+		for _, file := range files {
+			if file.IsDir() || !strings.HasSuffix(file.Name(), ".jsonl") {
+				continue
+			}
+			path := filepath.Join(root, dir.Name(), file.Name())
+			f, err := os.Open(path)
+			if err != nil {
+				continue
+			}
+			var rec map[string]any
+			err = json.NewDecoder(f).Decode(&rec)
+			_ = f.Close()
+			if err != nil || rec["type"] != "session_start" || rec["cwd"] != repoDir {
+				continue
+			}
+			info, err := file.Info()
+			if err == nil && info.ModTime().After(newestTime) {
+				newestTime = info.ModTime()
+				newestID = strings.TrimSuffix(file.Name(), ".jsonl")
+			}
+		}
+	}
+	if newestID != "" {
+		finalizeOrphanedSession(root, newestID)
 	}
 }
 
