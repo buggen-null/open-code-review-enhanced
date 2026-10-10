@@ -96,7 +96,7 @@ func newReviewQueue(root string, limit int) (*reviewQueue, error) {
 		}
 		for i := range q.items {
 			if q.items[i].Status == "running" || q.items[i].Status == "preparing" || q.items[i].Status == "fetching" {
-				finalizeOrphanedSession(root, q.items[i].SessionID)
+				finalizeOrphanedSessionForRepo(filepath.Join(q.repoRoot, "..", "sessions"), q.items[i].RepoDir, q.items[i].SessionID)
 				q.items[i].Status = "failed"
 				q.items[i].Error = "viewer restarted before the task completed"
 				q.items[i].FinishedAt = time.Now()
@@ -346,14 +346,30 @@ func (q *reviewQueue) remove(id string) bool {
 // A session can be removed from the repository page, so leaving its task row
 // behind creates a dead "view session" link and makes the deletion appear to
 // have failed.
-func (q *reviewQueue) removeSession(sessionID string) {
-	if sessionID == "" {
-		return
-	}
+func (q *reviewQueue) removeSession(repo, sessionID string) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	for i := 0; i < len(q.items); i++ {
-		if q.items[i].SessionID != sessionID {
+		itemRepo := filepath.Base(filepath.Clean(q.items[i].RepoDir))
+		if (sessionID == "" || q.items[i].SessionID != sessionID) && itemRepo != repo {
+			continue
+		}
+		if cancel := q.active[q.items[i].ID]; cancel != nil {
+			cancel()
+			delete(q.active, q.items[i].ID)
+		}
+		q.items = append(q.items[:i], q.items[i+1:]...)
+		i--
+	}
+	q.reindexLocked()
+	_ = q.persistLocked()
+}
+
+func (q *reviewQueue) removeRepository(repo string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for i := 0; i < len(q.items); i++ {
+		if filepath.Base(filepath.Clean(q.items[i].RepoDir)) != repo {
 			continue
 		}
 		if cancel := q.active[q.items[i].ID]; cancel != nil {

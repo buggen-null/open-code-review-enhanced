@@ -2,6 +2,18 @@
 // Copyright 2026 alibaba/open-code-review Contributors
 
 (() => {
+    const appPrefix = (() => {
+        const path = window.location.pathname;
+        const marker = path.indexOf('/r/');
+        if (marker >= 0) return path.slice(0, marker);
+        for (const suffix of ['/repos', '/tasks', '/submit', '/']) {
+            if (path.endsWith(suffix)) return path.slice(0, -suffix.length);
+        }
+        return '';
+    })();
+    const appURL = value => appPrefix && value.startsWith('/') && !value.startsWith(`${appPrefix}/`)
+        ? `${appPrefix}${value}`
+        : value;
     const main = document.querySelector('main');
     if (!main) return;
     const status = document.createElement('p');
@@ -162,12 +174,12 @@
             record.textContent = button.dataset.sessionId;
             openDialog({ title: '删除这条会话？', description: '删除后无法恢复。仅删除审核记录，不影响项目源码。', content: record, confirmLabel: '确认删除', onConfirm: async () => {
                 let response;
-                try { response = await fetch(button.dataset.deleteSession, { method: 'DELETE', headers: { 'X-OCR-Confirm': 'delete' }, credentials: 'same-origin' }); }
+                try { response = await fetch(appURL(button.dataset.deleteSession), { method: 'DELETE', headers: { 'X-OCR-Confirm': 'delete' }, credentials: 'same-origin' }); }
                 catch (_) { throw new Error('无法连接服务，请检查连接后重试。'); }
                 if (!response.ok && response.status !== 404) throw new Error(response.status === 403 ? '请求未通过验证，请刷新页面后重试。' : '删除失败，请稍后重试。');
                 try { localStorage.removeItem('ocr-viewer-marks:' + button.dataset.deleteSession.replace(/\/delete$/, '')); }
                 catch (_) { /* Storage failure must not undo a successful deletion. */ }
-                if (button.dataset.returnUrl) window.location.assign(button.dataset.returnUrl);
+                if (button.dataset.returnUrl) window.location.assign(appURL(button.dataset.returnUrl));
                 else window.location.reload();
             } });
         });
@@ -181,7 +193,7 @@
             record.textContent = button.dataset.repository || '';
             openDialog({ title: '删除这个仓库？', description: '删除后无法恢复，将删除该仓库的全部审核记录，不影响项目源码。', content: record, confirmLabel: '确认删除', onConfirm: async () => {
                 let response;
-                try { response = await fetch(button.dataset.deleteRepository, { method: 'DELETE', headers: { 'X-OCR-Confirm': 'delete' }, credentials: 'same-origin' }); }
+                try { response = await fetch(appURL(button.dataset.deleteRepository), { method: 'DELETE', headers: { 'X-OCR-Confirm': 'delete' }, credentials: 'same-origin' }); }
                 catch (_) { throw new Error('无法连接服务，请检查连接后重试。'); }
                 if (!response.ok && response.status !== 404) throw new Error(response.status === 403 ? '请求未通过验证，请刷新页面后重试。' : '删除失败，请稍后重试。');
                 window.location.reload();

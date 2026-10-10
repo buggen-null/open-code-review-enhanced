@@ -52,6 +52,20 @@ func TestPrefixRootRelativeURLsDoesNotDuplicatePrefix(t *testing.T) {
 	}
 }
 
+func TestPrefixRootRelativeURLsIncludesActionDataAttributes(t *testing.T) {
+	got := prefixRootRelativeURLs(`<button data-delete-session="/r/repo/s1/delete" data-return-url="/r/repo"></button><tr data-progress-url="/r/repo/s1/progress"></tr><button data-delete-repository="/r/repo/delete"></button>`, "/code-audit")
+	for _, want := range []string{
+		`data-delete-session="/code-audit/r/repo/s1/delete"`,
+		`data-return-url="/code-audit/r/repo"`,
+		`data-progress-url="/code-audit/r/repo/s1/progress"`,
+		`data-delete-repository="/code-audit/r/repo/delete"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("prefixed HTML missing %q: %s", want, got)
+		}
+	}
+}
+
 func TestForwardedPrefixHTMLPrefixesRenderedRepositoryLinksOnce(t *testing.T) {
 	root := t.TempDir()
 	repoDir := filepath.Join(root, "repo")
@@ -75,5 +89,26 @@ func TestForwardedPrefixHTMLPrefixesRenderedRepositoryLinksOnce(t *testing.T) {
 	}
 	if strings.Contains(body, "/code-audit/code-audit/") {
 		t.Fatalf("repository link contains a duplicated prefix: %s", body)
+	}
+}
+
+func TestForwardedPrefixHTMLPrefixesMutationAndProgressURLs(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<button data-delete-session="/r/repo/s1/delete" data-return-url="/r/repo"></button><button data-delete-repository="/r/repo/delete"></button><tr data-progress-url="/r/repo/s1/progress"></tr>`))
+	})
+	req := httptest.NewRequest(http.MethodGet, "http://viewer/code-audit/repos", nil)
+	req.Header.Set("X-Forwarded-Prefix", "/code-audit")
+	rec := httptest.NewRecorder()
+	forwardedPrefixHTML(next).ServeHTTP(rec, req)
+	for _, want := range []string{
+		`data-delete-session="/code-audit/r/repo/s1/delete"`,
+		`data-return-url="/code-audit/r/repo"`,
+		`data-delete-repository="/code-audit/r/repo/delete"`,
+		`data-progress-url="/code-audit/r/repo/s1/progress"`,
+	} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("body missing %q: %s", want, rec.Body.String())
+		}
 	}
 }

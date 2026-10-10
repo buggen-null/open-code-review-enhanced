@@ -2137,9 +2137,32 @@ nav.breadcrumb a:focus-visible {
     background-clip: padding-box;
     border-left: 1px solid var(--border-subtle);
 }
+.sessions-page .table,
+.repos-page .table,
+.tasks-page .table {
+    overflow: visible;
+}
+.sessions-page .table td.col-action,
+.repos-page .table td.col-action,
+.tasks-page .table td.task-actions {
+    display: table-cell;
+}
 .sessions-page .col-action { min-width: 13rem; }
 .repos-page .col-action { min-width: 10rem; }
 .tasks-page .task-actions { min-width: 11rem; }
+.action-group {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: .35rem;
+    min-width: max-content;
+}
+.sessions-page .table td.col-action,
+.repos-page .table td.col-action,
+.tasks-page .table td.task-actions {
+    width: 1%;
+    white-space: nowrap;
+}
 .sessions-page th.col-action,
 .repos-page th.col-action,
 .tasks-page th:last-child {
@@ -2174,7 +2197,7 @@ h1 { margin: 0; font-size: clamp(1.35rem, 2vw, 1.8rem); letter-spacing: -.02em; 
 .sessions-table .col-session { min-width: 12rem; }
 .sessions-table .col-session small { display: block; margin-top: .25rem; color: var(--text-muted); font-size: .72rem; }
 .sessions-table .col-branch { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.action-group { display: flex; flex-wrap: wrap; gap: .35rem; min-width: 13rem; }
+.sessions-page .action-group { min-width: 13rem; }
 .status-pill { display: inline-flex; padding: .22rem .5rem; border-radius: 999px; background: var(--badge-neutral-bg); color: var(--badge-neutral-fg); font-size: .72rem; white-space: nowrap; }
 .status-complete { color: #087443; background: #e8f8ef; }.status-partial { color: #9a6700; background: #fff8d8; }.status-failed, .status-aborted { color: #b42318; background: #fff0ef; }
 .compare-launcher { display: grid; grid-template-columns: minmax(15rem, .85fr) minmax(0, 1.6fr); align-items: center; gap: 2rem; padding: 1.2rem 1.35rem; margin-bottom: 1.25rem; background: linear-gradient(135deg, var(--accent-soft), var(--surface)); border: 1px solid var(--border); border-radius: var(--radius); }
@@ -2235,7 +2258,7 @@ h1 { margin: 0; font-size: clamp(1.35rem, 2vw, 1.8rem); letter-spacing: -.02em; 
 .submissions-table td:nth-child(6),
 .submissions-table td:nth-child(8),
 .submissions-table td:nth-child(10) { overflow-wrap: normal; word-break: normal; }
-.submissions-table .task-actions { display: flex; align-items: center; gap: .35rem; width: 11rem; min-width: 11rem; white-space: nowrap; }
+.submissions-table .task-actions { width: 11rem; min-width: 11rem; white-space: nowrap; }
 .submissions-table .task-actions .button { white-space: nowrap; }
 .submission-failure { position: relative; }
 .submission-failure p { max-width: 24rem; }

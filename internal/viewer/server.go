@@ -169,7 +169,11 @@ func (w *prefixResponseWriter) flush() {
 }
 
 func prefixRootRelativeURLs(body, prefix string) string {
-	for _, attribute := range []string{`href="/`, `src="/`, `action="/`} {
+	for _, attribute := range []string{
+		`href="/`, `src="/`, `action="/`,
+		`data-delete-session="/`, `data-delete-repository="/`,
+		`data-progress-url="/`, `data-return-url="/`,
+	} {
 		needle := attribute
 		replacement := attribute[:len(attribute)-1] + prefix + "/"
 		for start := 0; ; {
@@ -277,7 +281,7 @@ func newMux(root string) *http.ServeMux {
 			http.Error(w, "invalid repo path", http.StatusBadRequest)
 			return
 		}
-		handleDeleteRepository(w, r, root, repo)
+		handleDeleteRepository(w, r, root, repo, queue)
 	})
 	// Registered before the {sessionID} wildcard for readability only: a
 	// literal segment wins over a wildcard whatever the order.

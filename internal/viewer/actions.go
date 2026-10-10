@@ -38,12 +38,12 @@ func handleDeleteSession(w http.ResponseWriter, r *http.Request, root, repo, id 
 		return
 	}
 	if q != nil {
-		q.removeSession(id)
+		q.removeSession(repo, id)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func handleDeleteRepository(w http.ResponseWriter, r *http.Request, root, repo string) {
+func handleDeleteRepository(w http.ResponseWriter, r *http.Request, root, repo string, q *reviewQueue) {
 	if !sameOriginDelete(r) {
 		http.Error(w, "same-origin deletion confirmation required", http.StatusForbidden)
 		return
@@ -54,6 +54,7 @@ func handleDeleteRepository(w http.ResponseWriter, r *http.Request, root, repo s
 		return
 	}
 	defer dir.Close()
+	entries, _ := os.ReadDir(filepath.Join(root, repo))
 	if err := dir.RemoveAll(repo); err != nil {
 		if os.IsNotExist(err) {
 			http.Error(w, "repository not found", http.StatusNotFound)
@@ -61,6 +62,13 @@ func handleDeleteRepository(w http.ResponseWriter, r *http.Request, root, repo s
 		}
 		http.Error(w, "could not delete repository", http.StatusInternalServerError)
 		return
+	}
+	if q != nil {
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".jsonl") {
+				q.removeSession(repo, strings.TrimSuffix(entry.Name(), ".jsonl"))
+			}
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

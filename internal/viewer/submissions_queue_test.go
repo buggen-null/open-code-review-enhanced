@@ -37,3 +37,23 @@ func TestDefaultReviewLimitAllowsFiveConcurrentTasks(t *testing.T) {
 		t.Fatalf("defaultReviewLimit = %d, want 5", defaultReviewLimit)
 	}
 }
+
+func TestRemoveSessionCancelsTaskBeforeSessionIDIsKnown(t *testing.T) {
+	q := &reviewQueue{
+		path:   filepath.Join(t.TempDir(), "submissions.json"),
+		limit:  defaultReviewLimit,
+		active: make(map[string]context.CancelFunc),
+		items:  []ReviewSubmission{{ID: "task-1", RepoDir: filepath.Join("/tmp", "crm"), Status: "running"}},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	q.active["task-1"] = cancel
+	q.removeSession("crm", "")
+	select {
+	case <-ctx.Done():
+	default:
+		t.Fatal("session deletion did not cancel the active task")
+	}
+	if len(q.items) != 0 {
+		t.Fatalf("items after session deletion = %d, want 0", len(q.items))
+	}
+}

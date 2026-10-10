@@ -2,6 +2,10 @@
 // Copyright 2026 alibaba/open-code-review Contributors
 
 (() => {
+    const appPrefix = (() => {
+        const marker = window.location.pathname.indexOf('/r/');
+        return marker < 0 ? '' : window.location.pathname.slice(0, marker);
+    })();
     const table = document.getElementById("sessions-table");
     const pager = document.getElementById("sessions-pagination");
     const numbers = document.getElementById("sessions-page-numbers");
@@ -44,7 +48,9 @@
             const controller = new AbortController();
             const timeout = window.setTimeout(() => controller.abort(), 10000);
             try {
-                const response = await fetch(row.dataset.progressUrl, { cache: 'no-store', credentials: 'same-origin', signal: controller.signal });
+                const progressURL = row.dataset.progressUrl;
+                const url = appPrefix && progressURL.startsWith('/') && !progressURL.startsWith(`${appPrefix}/`) ? `${appPrefix}${progressURL}` : progressURL;
+                const response = await fetch(url, { cache: 'no-store', credentials: 'same-origin', signal: controller.signal });
                 if (response.status === 404) {
                     delete row.dataset.sessionActive;
                     return;
