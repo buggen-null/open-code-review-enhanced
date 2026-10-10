@@ -321,7 +321,6 @@ func newMux(root string) *http.ServeMux {
 		"GET /r/{repo}/{sessionID}/export": func(w http.ResponseWriter, r *http.Request, root, repo, id string) {
 			handleSessionExport(w, r, root, repo, id, r.URL.Query().Get("format"))
 		},
-		"DELETE /r/{repo}/{sessionID}/delete": handleDeleteSession,
 	} {
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 			repo, id := r.PathValue("repo"), r.PathValue("sessionID")
@@ -332,6 +331,14 @@ func newMux(root string) *http.ServeMux {
 			handler(w, r, root, repo, id)
 		})
 	}
+	mux.HandleFunc("DELETE /r/{repo}/{sessionID}/delete", func(w http.ResponseWriter, r *http.Request) {
+		repo, id := r.PathValue("repo"), r.PathValue("sessionID")
+		if unsafeSegment(repo) || unsafeSegment(id) {
+			http.Error(w, "invalid path", http.StatusBadRequest)
+			return
+		}
+		handleDeleteSession(w, r, root, repo, id, queue)
+	})
 	return mux
 }
 

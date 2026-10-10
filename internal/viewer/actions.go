@@ -17,7 +17,7 @@ import (
 
 // Session mutations require an explicit same-origin browser request. The custom
 // header prevents cross-origin forms from deleting local review records.
-func handleDeleteSession(w http.ResponseWriter, r *http.Request, root, repo, id string) {
+func handleDeleteSession(w http.ResponseWriter, r *http.Request, root, repo, id string, q *reviewQueue) {
 	if !sameOriginDelete(r) {
 		http.Error(w, "same-origin deletion confirmation required", http.StatusForbidden)
 		return
@@ -36,6 +36,9 @@ func handleDeleteSession(w http.ResponseWriter, r *http.Request, root, repo, id 
 		}
 		http.Error(w, "could not delete session", status)
 		return
+	}
+	if q != nil {
+		q.removeSession(id)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

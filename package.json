@@ -1,6 +1,6 @@
 {
   "name": "open-code-review-enhanced",
-  "version": "1.1.35-test",
+  "version": "1.1.36-test",
   "description": "OpenCodeReview CLI — AI-powered code review tool",
   "bin": {
     "ocr": "bin/ocr.js"
@@ -34,7 +34,8 @@
     "docs/release-notes-1.1.32-test.md",
     "docs/release-notes-1.1.33-test.md",
     "docs/release-notes-1.1.34-test.md",
-    "docs/release-notes-1.1.35-test.md"
+    "docs/release-notes-1.1.35-test.md",
+    "docs/release-notes-1.1.36-test.md"
   ],
   "scripts": {
     "postinstall": "node scripts/install.js",
@@ -56,12 +57,12 @@
     "checksumPattern": "https://github.com/buggen-null/open-code-review-enhanced/releases/download/v{version}/sha256sum.txt"
   },
   "optionalDependencies": {
-    "open-code-review-enhanced-darwin-arm64": "1.1.35-test",
-    "open-code-review-enhanced-darwin-x64": "1.1.35-test",
-    "open-code-review-enhanced-linux-arm64": "1.1.35-test",
-    "open-code-review-enhanced-linux-x64": "1.1.35-test",
-    "open-code-review-enhanced-win32-arm64": "1.1.35-test",
-    "open-code-review-enhanced-win32-x64": "1.1.35-test"
+    "open-code-review-enhanced-darwin-arm64": "1.1.36-test",
+    "open-code-review-enhanced-darwin-x64": "1.1.36-test",
+    "open-code-review-enhanced-linux-arm64": "1.1.36-test",
+    "open-code-review-enhanced-linux-x64": "1.1.36-test",
+    "open-code-review-enhanced-win32-arm64": "1.1.36-test",
+    "open-code-review-enhanced-win32-x64": "1.1.36-test"
   },
   "engines": {
     "node": ">=14"
