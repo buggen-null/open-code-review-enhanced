@@ -342,6 +342,31 @@ func (q *reviewQueue) remove(id string) bool {
 	return false
 }
 
+// removeSession forgets queue records that point at a session being deleted.
+// A session can be removed from the repository page, so leaving its task row
+// behind creates a dead "view session" link and makes the deletion appear to
+// have failed.
+func (q *reviewQueue) removeSession(sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for i := 0; i < len(q.items); i++ {
+		if q.items[i].SessionID != sessionID {
+			continue
+		}
+		if cancel := q.active[q.items[i].ID]; cancel != nil {
+			cancel()
+			delete(q.active, q.items[i].ID)
+		}
+		q.items = append(q.items[:i], q.items[i+1:]...)
+		i--
+	}
+	q.reindexLocked()
+	_ = q.persistLocked()
+}
+
 func (q *reviewQueue) run(ctx context.Context, item ReviewSubmission) {
 	defer func() {
 		if ctx.Err() != nil {
