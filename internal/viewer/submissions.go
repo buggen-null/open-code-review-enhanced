@@ -25,6 +25,7 @@ import (
 )
 
 const defaultReviewLimit = 5
+const defaultReviewTimeout = 2 * time.Hour
 
 func configuredReviewLimit() int {
 	value := strings.TrimSpace(os.Getenv("OCR_VIEWER_MAX_RUNNING_REVIEWS"))
@@ -36,6 +37,18 @@ func configuredReviewLimit() int {
 		return defaultReviewLimit
 	}
 	return limit
+}
+
+func configuredReviewTimeout() time.Duration {
+	value := strings.TrimSpace(os.Getenv("OCR_VIEWER_REVIEW_TIMEOUT"))
+	if value == "" {
+		return defaultReviewTimeout
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil || d < time.Minute || d > 24*time.Hour {
+		return defaultReviewTimeout
+	}
+	return d
 }
 
 type ReviewSubmission struct {
@@ -83,6 +96,7 @@ func newReviewQueue(root string, limit int) (*reviewQueue, error) {
 		}
 		for i := range q.items {
 			if q.items[i].Status == "running" || q.items[i].Status == "preparing" || q.items[i].Status == "fetching" {
+				finalizeOrphanedSession(root, q.items[i].SessionID)
 				q.items[i].Status = "failed"
 				q.items[i].Error = "viewer restarted before the task completed"
 				q.items[i].FinishedAt = time.Now()
@@ -244,7 +258,7 @@ func (q *reviewQueue) dispatch() {
 				break
 			}
 			item := q.items[idx]
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithTimeout(context.Background(), configuredReviewTimeout())
 			q.active[item.ID] = cancel
 			q.items[idx].Status = "preparing"
 			q.items[idx].StartedAt = time.Now()
@@ -303,6 +317,7 @@ func (q *reviewQueue) cancel(id string) bool {
 			cancel()
 			q.items[i].Status = "cancelled"
 			q.items[i].FinishedAt = time.Now()
+			finalizeOrphanedSession(filepath.Join(q.repoRoot, "..", "sessions"), q.items[i].SessionID)
 			q.reindexLocked()
 			_ = q.persistLocked()
 			return true
@@ -329,6 +344,25 @@ func (q *reviewQueue) remove(id string) bool {
 
 func (q *reviewQueue) run(ctx context.Context, item ReviewSubmission) {
 	defer func() {
+		if ctx.Err() != nil {
+			q.mu.Lock()
+			active := false
+			for _, current := range q.items {
+				active = current.ID == item.ID && (current.Status == "preparing" || current.Status == "fetching" || current.Status == "running")
+				if current.ID == item.ID {
+					break
+				}
+			}
+			q.mu.Unlock()
+			if active {
+				message := "审核任务已超时"
+				if errors.Is(ctx.Err(), context.Canceled) {
+					message = "审核任务被取消"
+				}
+				q.update(item.ID, "failed", item.SessionID, message)
+				finalizeOrphanedSession(filepath.Join(q.repoRoot, "..", "sessions"), item.SessionID)
+			}
+		}
 		q.mu.Lock()
 		delete(q.active, item.ID)
 		q.mu.Unlock()
@@ -414,6 +448,36 @@ func (q *reviewQueue) run(ctx context.Context, item ReviewSubmission) {
 		return
 	}
 	q.update(item.ID, "success", result.SessionID, "")
+}
+
+func finalizeOrphanedSession(root, sessionID string) {
+	if sessionID == "" || !sessionIDRE.MatchString(sessionID) {
+		return
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(root, entry.Name(), sessionID+".jsonl")
+		if _, err := os.Stat(path); err != nil {
+			continue
+		}
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			return
+		}
+		payload, _ := json.Marshal(map[string]any{
+			"type": "session_end", "timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+			"duration_seconds": 0, "files_reviewed": []string{}, "llm_failures": 1,
+		})
+		_, _ = f.Write(append(payload, '\n'))
+		_ = f.Close()
+		return
+	}
 }
 
 func remoteRef(branch string) string {

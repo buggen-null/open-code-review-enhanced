@@ -2135,7 +2135,7 @@ nav.breadcrumb a:focus-visible {
     z-index: 2;
     background: var(--surface);
     background-clip: padding-box;
-    box-shadow: -8px 0 12px -12px var(--shadow-color, #000);
+    border-left: 1px solid var(--border-subtle);
 }
 .sessions-page .col-action { min-width: 13rem; }
 .repos-page .col-action { min-width: 10rem; }
