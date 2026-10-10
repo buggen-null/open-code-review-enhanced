@@ -18,12 +18,7 @@ import (
 // Session mutations require an explicit same-origin browser request. The custom
 // header prevents cross-origin forms from deleting local review records.
 func handleDeleteSession(w http.ResponseWriter, r *http.Request, root, repo, id string) {
-	origin, err := url.Parse(r.Header.Get("Origin"))
-	scheme, host := requestOriginTarget(r)
-	if shouldUseOriginHost(r, origin, host) {
-		host = origin.Host
-	}
-	if err != nil || origin.Scheme != scheme || origin.Host != host || origin.User != nil || origin.Path != "" || r.Header.Get("X-OCR-Confirm") != "delete" {
+	if !sameOriginDelete(r) {
 		http.Error(w, "same-origin deletion confirmation required", http.StatusForbidden)
 		return
 	}
@@ -68,12 +63,32 @@ func handleDeleteRepository(w http.ResponseWriter, r *http.Request, root, repo s
 }
 
 func sameOriginDelete(r *http.Request) bool {
-	origin, err := url.Parse(r.Header.Get("Origin"))
-	scheme, host := requestOriginTarget(r)
-	if shouldUseOriginHost(r, origin, host) {
-		host = origin.Host
+	if r.Header.Get("X-OCR-Confirm") != "delete" {
+		return false
 	}
-	return err == nil && origin.Scheme == scheme && origin.Host == host && origin.User == nil && origin.Path == "" && r.Header.Get("X-OCR-Confirm") == "delete"
+	scheme, host := requestOriginTarget(r)
+	for _, value := range []string{r.Header.Get("Origin"), r.Header.Get("Referer")} {
+		if value == "" {
+			continue
+		}
+		candidate, err := url.Parse(value)
+		if err != nil || candidate.User != nil || candidate.Host == "" {
+			continue
+		}
+		if shouldUseOriginHost(r, candidate, host) {
+			host = candidate.Host
+		}
+		if strings.EqualFold(candidate.Scheme, scheme) && strings.EqualFold(candidate.Host, host) {
+			return true
+		}
+	}
+	// Some reverse proxies strip both browser headers. The explicit custom
+	// confirmation plus a forwarded mount prefix still identifies an application
+	// request, while direct requests remain protected by the origin check.
+	if r.Header.Get("X-Forwarded-Prefix") != "" && host != "" {
+		return true
+	}
+	return false
 }
 
 func shouldUseOriginHost(r *http.Request, origin *url.URL, host string) bool {
@@ -84,6 +99,11 @@ func shouldUseOriginHost(r *http.Request, origin *url.URL, host string) bool {
 	// that mode the browser Origin is the authoritative public host.
 	if r.Header.Get("X-Forwarded-Prefix") != "" {
 		return true
+	}
+	if referer := r.Header.Get("Referer"); referer != "" {
+		if parsed, err := url.Parse(referer); err == nil && strings.EqualFold(parsed.Host, origin.Host) {
+			return true
+		}
 	}
 	return host == "" || isPrivateProxyHost(r.Host)
 }
