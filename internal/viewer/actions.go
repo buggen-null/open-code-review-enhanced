@@ -20,7 +20,7 @@ import (
 func handleDeleteSession(w http.ResponseWriter, r *http.Request, root, repo, id string) {
 	origin, err := url.Parse(r.Header.Get("Origin"))
 	scheme, host := requestOriginTarget(r)
-	if host == "" || (r.Header.Get("X-Forwarded-Host") == "" && r.Header.Get("X-Forwarded-Prefix") != "" && err == nil && origin.Host != "") {
+	if host == "" || (r.Header.Get("X-Forwarded-Host") == "" && err == nil && origin.Host != "" && isPrivateProxyHost(r.Host)) {
 		host = origin.Host
 	}
 	if err != nil || origin.Scheme != scheme || origin.Host != host || origin.User != nil || origin.Path != "" || r.Header.Get("X-OCR-Confirm") != "delete" {
@@ -70,10 +70,15 @@ func handleDeleteRepository(w http.ResponseWriter, r *http.Request, root, repo s
 func sameOriginDelete(r *http.Request) bool {
 	origin, err := url.Parse(r.Header.Get("Origin"))
 	scheme, host := requestOriginTarget(r)
-	if host == "" || (r.Header.Get("X-Forwarded-Host") == "" && r.Header.Get("X-Forwarded-Prefix") != "" && err == nil && origin.Host != "") {
+	if host == "" || (r.Header.Get("X-Forwarded-Host") == "" && err == nil && origin.Host != "" && isPrivateProxyHost(r.Host)) {
 		host = origin.Host
 	}
 	return err == nil && origin.Scheme == scheme && origin.Host == host && origin.User == nil && origin.Path == "" && r.Header.Get("X-OCR-Confirm") == "delete"
+}
+
+func isPrivateProxyHost(host string) bool {
+	host = strings.ToLower(strings.Split(host, ":")[0])
+	return host == "localhost" || strings.HasPrefix(host, "127.") || strings.HasPrefix(host, "10.") || strings.HasPrefix(host, "192.168.") || strings.HasPrefix(host, "172.16.") || strings.HasPrefix(host, "172.17.") || strings.HasPrefix(host, "172.18.") || strings.HasPrefix(host, "172.19.") || strings.HasPrefix(host, "172.2") || strings.HasPrefix(host, "172.3")
 }
 
 func requestOriginTarget(r *http.Request) (string, string) {
