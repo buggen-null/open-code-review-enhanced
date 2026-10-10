@@ -20,7 +20,7 @@ import (
 func handleDeleteSession(w http.ResponseWriter, r *http.Request, root, repo, id string) {
 	origin, err := url.Parse(r.Header.Get("Origin"))
 	scheme, host := requestOriginTarget(r)
-	if host == "" || (r.Header.Get("X-Forwarded-Host") == "" && r.Header.Get("X-Forwarded-Prefix") != "" && origin != nil) {
+	if host == "" || (r.Header.Get("X-Forwarded-Host") == "" && r.Header.Get("X-Forwarded-Prefix") != "" && err == nil && origin.Host != "") {
 		host = origin.Host
 	}
 	if err != nil || origin.Scheme != scheme || origin.Host != host || origin.User != nil || origin.Path != "" || r.Header.Get("X-OCR-Confirm") != "delete" {
@@ -70,7 +70,7 @@ func handleDeleteRepository(w http.ResponseWriter, r *http.Request, root, repo s
 func sameOriginDelete(r *http.Request) bool {
 	origin, err := url.Parse(r.Header.Get("Origin"))
 	scheme, host := requestOriginTarget(r)
-	if host == "" || (r.Header.Get("X-Forwarded-Host") == "" && r.Header.Get("X-Forwarded-Prefix") != "" && origin != nil) {
+	if host == "" || (r.Header.Get("X-Forwarded-Host") == "" && r.Header.Get("X-Forwarded-Prefix") != "" && err == nil && origin.Host != "") {
 		host = origin.Host
 	}
 	return err == nil && origin.Scheme == scheme && origin.Host == host && origin.User == nil && origin.Path == "" && r.Header.Get("X-OCR-Confirm") == "delete"

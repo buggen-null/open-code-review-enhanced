@@ -1606,6 +1606,7 @@ p {
 }
 
 .sessions-page .table-scroll {
+    position: relative;
     overflow-x: auto;
     overscroll-behavior: contain;
 }
@@ -1887,6 +1888,7 @@ nav.breadcrumb a:focus-visible {
 }
 
 .repos-page .table-scroll {
+    position: relative;
     overflow-x: auto;
     overscroll-behavior: contain;
 }
@@ -2132,8 +2134,12 @@ nav.breadcrumb a:focus-visible {
     right: 0;
     z-index: 2;
     background: var(--surface);
+    background-clip: padding-box;
     box-shadow: -8px 0 12px -12px var(--shadow-color, #000);
 }
+.sessions-page .col-action { min-width: 13rem; }
+.repos-page .col-action { min-width: 10rem; }
+.tasks-page .task-actions { min-width: 11rem; }
 .sessions-page th.col-action,
 .repos-page th.col-action,
 .tasks-page th:last-child {
@@ -2201,11 +2207,17 @@ h1 { margin: 0; font-size: clamp(1.35rem, 2vw, 1.8rem); letter-spacing: -.02em; 
 
 .submissions-table .inline-form { display: inline-block; margin: 0; }
 .tasks-page .table-scroll {
+    position: relative;
     max-width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
+}
+.sessions-page .table-scroll > .table,
+.repos-page .table-scroll > .table,
+.tasks-page .table-scroll > .table {
+    overflow: visible;
 }
 .submissions-table { min-width: 101rem; table-layout: fixed; }
 .submissions-table th:nth-child(1) { width: 7rem; }
