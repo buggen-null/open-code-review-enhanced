@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/alibaba/open-code-review/internal/session"
 )
@@ -53,6 +54,28 @@ func TestTerminalTaskRejectsLateWorkerUpdate(t *testing.T) {
 func TestDefaultReviewLimitAllowsFiveConcurrentTasks(t *testing.T) {
 	if defaultReviewLimit != 5 {
 		t.Fatalf("defaultReviewLimit = %d, want 5", defaultReviewLimit)
+	}
+}
+
+func TestConfiguredReviewTaskTimeout(t *testing.T) {
+	if got := configuredReviewTaskTimeout(); got != defaultReviewTaskTimeout {
+		t.Fatalf("default review task timeout = %d, want %d", got, defaultReviewTaskTimeout)
+	}
+	for _, tc := range []struct {
+		value string
+		want  int
+	}{
+		{value: "45", want: 45},
+		{value: "0", want: 0},
+		{value: "1441", want: defaultReviewTaskTimeout},
+		{value: "invalid", want: defaultReviewTaskTimeout},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			t.Setenv("OCR_VIEWER_REVIEW_TASK_TIMEOUT", tc.value)
+			if got := configuredReviewTaskTimeout(); got != tc.want {
+				t.Fatalf("configuredReviewTaskTimeout() = %d, want %d", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -110,5 +133,36 @@ func TestWaitForReviewSessionRequiresSessionEnd(t *testing.T) {
 	}
 	if ended, success := waitForReviewSession(context.Background(), repoDir, "session-1"); !ended || !success {
 		t.Fatalf("partial session = ended:%v success:%v, want true,true", ended, success)
+	}
+}
+
+func TestFindReviewSessionIgnoresSessionsStartedBeforeTask(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	oldStart := time.Date(2026, 10, 10, 9, 0, 0, 0, time.UTC)
+	taskStart := oldStart.Add(time.Minute)
+	for _, tc := range []struct {
+		id    string
+		start time.Time
+	}{
+		{id: "old-session", start: oldStart},
+		{id: "new-session", start: taskStart.Add(time.Second)},
+	} {
+		path, err := session.SessionFilePath(repoDir, tc.id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		line := fmt.Sprintf(`{"type":"session_start","sessionId":%q,"cwd":%q,"timestamp":%q}`+"\n", tc.id, repoDir, tc.start.Format(time.RFC3339Nano))
+		if err := os.WriteFile(path, []byte(line), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := findReviewSession(repoDir, taskStart); got != "new-session" {
+		t.Fatalf("findReviewSession() = %q, want new-session", got)
 	}
 }

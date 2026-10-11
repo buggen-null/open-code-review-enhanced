@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +31,10 @@ import (
 
 const defaultReviewLimit = 5
 const defaultReviewTimeout = 24 * time.Hour
+
+// A zero CLI timeout lets large files finish; the queue's overall review
+// deadline still bounds a task through configuredReviewTimeout.
+const defaultReviewTaskTimeout = 0
 
 func configuredReviewLimit() int {
 	value := strings.TrimSpace(os.Getenv("OCR_VIEWER_MAX_RUNNING_REVIEWS"))
@@ -53,6 +58,18 @@ func configuredReviewTimeout() time.Duration {
 		return defaultReviewTimeout
 	}
 	return d
+}
+
+func configuredReviewTaskTimeout() int {
+	value := strings.TrimSpace(os.Getenv("OCR_VIEWER_REVIEW_TASK_TIMEOUT"))
+	if value == "" {
+		return defaultReviewTaskTimeout
+	}
+	var minutes int
+	if _, err := fmt.Sscanf(value, "%d", &minutes); err != nil || minutes < 0 || minutes > 1440 {
+		return defaultReviewTaskTimeout
+	}
+	return minutes
 }
 
 type ReviewSubmission struct {
@@ -261,11 +278,11 @@ func (q *reviewQueue) dispatch() {
 			if idx < 0 {
 				break
 			}
+			q.items[idx].StartedAt = time.Now()
 			item := q.items[idx]
 			ctx, cancel := context.WithTimeout(context.Background(), configuredReviewTimeout())
 			q.active[item.ID] = cancel
 			q.items[idx].Status = "preparing"
-			q.items[idx].StartedAt = time.Now()
 			q.reindexLocked()
 			_ = q.persistLocked()
 			go q.run(ctx, item)
@@ -474,6 +491,7 @@ func (q *reviewQueue) run(ctx context.Context, item ReviewSubmission) {
 		return
 	}
 	args := []string{"review", "--repo", item.RepoDir, "--from", from, "--to", to, "--format", "json", "--audience", "agent"}
+	args = append(args, "--timeout", strconv.Itoa(configuredReviewTaskTimeout()))
 	if item.DefaultPrompt {
 		args = append(args, "--default-prompt")
 	}
