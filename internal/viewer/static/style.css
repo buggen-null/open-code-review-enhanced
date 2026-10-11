@@ -2242,7 +2242,7 @@ h1 { margin: 0; font-size: clamp(1.35rem, 2vw, 1.8rem); letter-spacing: -.02em; 
 .tasks-page .table-scroll > .table {
     overflow: visible;
 }
-.submissions-table { min-width: 101rem; table-layout: fixed; }
+.submissions-table { min-width: 112rem; table-layout: fixed; }
 .submissions-table th:nth-child(1) { width: 7rem; }
 .submissions-table th:nth-child(2) { width: 11rem; }
 .submissions-table th:nth-child(3),
@@ -2252,12 +2252,14 @@ h1 { margin: 0; font-size: clamp(1.35rem, 2vw, 1.8rem); letter-spacing: -.02em; 
 .submissions-table th:nth-child(7) { width: 9rem; }
 .submissions-table th:nth-child(8) { width: 7rem; }
 .submissions-table th:nth-child(9) { width: 13rem; }
-.submissions-table th:nth-child(10) { width: 11rem; }
+.submissions-table th:nth-child(10) { width: 18rem; }
+.submissions-table th:nth-child(11) { width: 11rem; }
 .submissions-table td { overflow-wrap: anywhere; word-break: break-word; }
 .submissions-table td:nth-child(1),
 .submissions-table td:nth-child(6),
 .submissions-table td:nth-child(8),
-.submissions-table td:nth-child(10) { overflow-wrap: normal; word-break: normal; }
+.submissions-table td:nth-child(11) { overflow-wrap: normal; word-break: normal; }
+.submissions-table .submission-error-cell { overflow: visible; }
 .submissions-table .task-actions { width: 11rem; min-width: 11rem; white-space: nowrap; }
 .submissions-table .task-actions .button { white-space: nowrap; }
 .submission-failure { position: relative; }

@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alibaba/open-code-review/internal/config/template"
 	"github.com/alibaba/open-code-review/internal/llm"
@@ -276,6 +277,43 @@ func TestExecuteToolCall_CodeCommentAsyncPool(t *testing.T) {
 	}
 	if comments[0].Path != "async.go" {
 		t.Errorf("comment path = %q, want async.go", comments[0].Path)
+	}
+}
+
+func TestExecuteToolCall_CodeCommentAsyncPoolHonorsCancellation(t *testing.T) {
+	collector := tool.NewCommentCollector()
+	pool := NewCommentWorkerPool(1)
+	reg := tool.NewRegistry()
+	reg.Register(&tool.CodeCommentProvider{Collector: collector})
+	reg.Freeze()
+	observedCancellation := make(chan struct{})
+	r := NewRunner(Deps{
+		Tools:             reg,
+		CommentCollector:  collector,
+		CommentWorkerPool: pool,
+		AttributeComment: func(ctx context.Context, _ model.LlmComment, _ *model.Diff) *model.CodeAttribution {
+			select {
+			case <-ctx.Done():
+				close(observedCancellation)
+			case <-time.After(time.Second):
+			}
+			return nil
+		},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	r.executeToolCall(ctx, "cancelled.go", llm.ToolCall{
+		Function: llm.FunctionCall{
+			Name:      tool.CodeComment.Name(),
+			Arguments: `{"comments":[{"content":"issue","path":"cancelled.go"}]}`,
+		},
+	}, nil, "")
+	r.CollectPendingComments()
+	select {
+	case <-observedCancellation:
+	default:
+		t.Fatal("comment worker did not observe subtask cancellation")
 	}
 }
 

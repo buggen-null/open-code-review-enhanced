@@ -4,12 +4,14 @@
 package viewer
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -22,10 +24,12 @@ import (
 	"sync"
 	"time"
 	"unicode"
+
+	reviewSession "github.com/alibaba/open-code-review/internal/session"
 )
 
 const defaultReviewLimit = 5
-const defaultReviewTimeout = 2 * time.Hour
+const defaultReviewTimeout = 24 * time.Hour
 
 func configuredReviewLimit() int {
 	value := strings.TrimSpace(os.Getenv("OCR_VIEWER_MAX_RUNNING_REVIEWS"))
@@ -283,6 +287,9 @@ func (q *reviewQueue) update(id, status, sessionID, message string) {
 		if q.items[i].Status == "cancelled" {
 			return
 		}
+		if q.items[i].Status == "success" || q.items[i].Status == "failed" {
+			return
+		}
 		q.items[i].Status = status
 		q.items[i].SessionID = sessionID
 		q.items[i].Error = message
@@ -476,8 +483,35 @@ func (q *reviewQueue) run(ctx context.Context, item ReviewSubmission) {
 	if item.ResumeSessionID != "" {
 		args = append(args, "--resume", item.ResumeSessionID)
 	}
-	out, err := runReviewProcess(ctx, exe, args...)
+	startedAt := item.StartedAt
+	var discoveredSessionID string
+	var sessionWatcherStarted bool
+	var out []byte
+	out, err, discoveredSessionID = runReviewProcess(ctx, exe, args, item.RepoDir, startedAt, func(id string) {
+		if id == discoveredSessionID {
+			return
+		}
+		discoveredSessionID = id
+		item.SessionID = id
+		// Bind the queue item as soon as the session file is created. The
+		// reviewer may continue after its parent process reports an error.
+		q.update(item.ID, "running", id, "")
+		if !sessionWatcherStarted {
+			sessionWatcherStarted = true
+			go q.watchReviewSession(ctx, item.ID, item.RepoDir, id)
+		}
+	})
 	if err != nil {
+		if discoveredSessionID != "" {
+			if ended, success := waitForReviewSession(ctx, item.RepoDir, discoveredSessionID); ended {
+				if success {
+					q.update(item.ID, "success", discoveredSessionID, reviewSessionNotice(item.RepoDir, discoveredSessionID))
+				} else {
+					q.update(item.ID, "failed", discoveredSessionID, reviewSessionFailureMessage(item.RepoDir, discoveredSessionID, safeTaskError(err)))
+				}
+				return
+			}
+		}
 		fail(fmt.Errorf("review failed: %w", err))
 		return
 	}
@@ -485,10 +519,69 @@ func (q *reviewQueue) run(ctx context.Context, item ReviewSubmission) {
 		SessionID string `json:"session_id"`
 	}
 	if err := json.Unmarshal(out, &result); err != nil {
+		if discoveredSessionID != "" {
+			if ended, success := waitForReviewSession(ctx, item.RepoDir, discoveredSessionID); ended {
+				if success {
+					q.update(item.ID, "success", discoveredSessionID, reviewSessionNotice(item.RepoDir, discoveredSessionID))
+				} else {
+					q.update(item.ID, "failed", discoveredSessionID, reviewSessionFailureMessage(item.RepoDir, discoveredSessionID, "could not read review result session ID"))
+				}
+				return
+			}
+		}
 		fail(fmt.Errorf("could not read review result session ID"))
 		return
 	}
-	q.update(item.ID, "success", result.SessionID, "")
+	if result.SessionID == "" {
+		result.SessionID = discoveredSessionID
+	}
+	if result.SessionID == "" {
+		fail(fmt.Errorf("could not read review result session ID"))
+		return
+	}
+	if ended, success := waitForReviewSession(ctx, item.RepoDir, result.SessionID); ended {
+		if success {
+			q.update(item.ID, "success", result.SessionID, reviewSessionNotice(item.RepoDir, result.SessionID))
+		} else {
+			q.update(item.ID, "failed", result.SessionID, reviewSessionFailureMessage(item.RepoDir, result.SessionID, "review session ended with failures"))
+		}
+	}
+}
+
+func (q *reviewQueue) watchReviewSession(ctx context.Context, taskID, repoDir, sessionID string) {
+	ended, success := waitForReviewSession(ctx, repoDir, sessionID)
+	if !ended {
+		return
+	}
+	if success {
+		q.update(taskID, "success", sessionID, reviewSessionNotice(repoDir, sessionID))
+	} else {
+		q.update(taskID, "failed", sessionID, reviewSessionFailureMessage(repoDir, sessionID, "review session ended with failures"))
+	}
+}
+
+func reviewSessionNotice(repoDir, sessionID string) string {
+	summary, err := reviewSession.LoadSummary(repoDir, sessionID)
+	if err != nil || summary.RunManifest == nil || summary.RunManifest.TerminalState != "partial" || len(summary.RunManifest.Coverage.Failed) == 0 {
+		return ""
+	}
+	failed := summary.RunManifest.Coverage.Failed[0]
+	if failed.Reason == "" {
+		return fmt.Sprintf("partial session: %d files failed", len(summary.RunManifest.Coverage.Failed))
+	}
+	return fmt.Sprintf("partial session: %d files failed; %s", len(summary.RunManifest.Coverage.Failed), failed.Reason)
+}
+
+func reviewSessionFailureMessage(repoDir, sessionID, fallback string) string {
+	summary, err := reviewSession.LoadSummary(repoDir, sessionID)
+	if err != nil || summary.RunManifest == nil || summary.RunManifest.RunFailure == nil {
+		return fallback
+	}
+	failure := summary.RunManifest.RunFailure
+	if failure.Reason == "" {
+		return string(failure.Classification)
+	}
+	return fmt.Sprintf("%s: %s", failure.Classification, failure.Reason)
 }
 
 func finalizeOrphanedSession(root, sessionID string) {
@@ -589,9 +682,132 @@ func runTaskCommandOutput(ctx context.Context, name string, args ...string) ([]b
 	return cmd.Output()
 }
 
-func runReviewProcess(ctx context.Context, exe string, args ...string) ([]byte, error) {
+// runReviewProcess starts the reviewer and watches the session directory while
+// it runs. The CLI process can return before a child reviewer has finished, so
+// the queue must discover and persist the session ID independently of stdout.
+func runReviewProcess(ctx context.Context, exe string, args []string, repoDir string, startedAt time.Time, onSession func(string)) ([]byte, error, string) {
 	cmd := exec.CommandContext(ctx, exe, args...)
-	return cmd.Output()
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err, ""
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err, ""
+	}
+	outputCh := make(chan []byte, 1)
+	waitCh := make(chan error, 1)
+	go func() {
+		output, readErr := io.ReadAll(stdout)
+		if readErr != nil {
+			outputCh <- nil
+			return
+		}
+		outputCh <- output
+	}()
+	go func() { waitCh <- cmd.Wait() }()
+
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	var sessionID string
+	for {
+		select {
+		case <-ticker.C:
+			if id := findReviewSession(repoDir, startedAt); id != "" {
+				if id != sessionID {
+					sessionID = id
+					onSession(id)
+				}
+			}
+		case waitErr := <-waitCh:
+			if id := findReviewSession(repoDir, startedAt); id != "" && id != sessionID {
+				sessionID = id
+				onSession(id)
+			}
+			select {
+			case output := <-outputCh:
+				return output, waitErr, sessionID
+			default:
+				// A child reviewer can keep stdout open after the parent exits.
+				// The session file is authoritative in that case; do not wait for
+				// EOF before allowing the queue to observe its terminal state.
+				return nil, waitErr, sessionID
+			}
+		}
+	}
+}
+
+func findReviewSession(repoDir string, startedAt time.Time) string {
+	dir, err := reviewSession.SessionsDir(repoDir)
+	if err != nil {
+		return ""
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	var newest string
+	var newestTime time.Time
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		file, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		var start struct {
+			Type      string `json:"type"`
+			SessionID string `json:"sessionId"`
+			CWD       string `json:"cwd"`
+			Timestamp string `json:"timestamp"`
+		}
+		err = json.NewDecoder(bufio.NewReader(file)).Decode(&start)
+		_ = file.Close()
+		if err != nil || start.Type != "session_start" || start.SessionID == "" || filepath.Clean(start.CWD) != filepath.Clean(repoDir) {
+			continue
+		}
+		candidateTime := info.ModTime()
+		if parsed, parseErr := time.Parse(time.RFC3339Nano, start.Timestamp); parseErr == nil {
+			candidateTime = parsed
+		}
+		if !startedAt.IsZero() && candidateTime.Before(startedAt.Add(-2*time.Second)) {
+			continue
+		}
+		if candidateTime.After(newestTime) {
+			newestTime = candidateTime
+			newest = strings.TrimSuffix(entry.Name(), ".jsonl")
+		}
+	}
+	return newest
+}
+
+// waitForReviewSession waits for session_end after the reviewer process has
+// failed. This keeps the queue state aligned with the actual session rather
+// than the short-lived parent process.
+func waitForReviewSession(ctx context.Context, repoDir, sessionID string) (ended, success bool) {
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if summary, err := reviewSession.LoadSummary(repoDir, sessionID); err == nil && !summary.Aborted {
+			// A partial or skipped session is still a finished audit: its
+			// per-file failures are recorded in the session manifest. Only an
+			// explicit failed terminal state means the audit itself failed.
+			if summary.RunManifest == nil || summary.RunManifest.TerminalState == "" || summary.RunManifest.TerminalState == "complete" || summary.RunManifest.TerminalState == "partial" || summary.RunManifest.TerminalState == "skipped" {
+				return true, true
+			}
+			return true, false
+		}
+		select {
+		case <-ctx.Done():
+			return false, false
+		case <-ticker.C:
+		}
+	}
 }
 
 func safeTaskError(err error) string {
