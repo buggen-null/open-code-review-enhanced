@@ -12,17 +12,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Session mutations require an explicit same-origin browser request. The custom
 // header prevents cross-origin forms from deleting local review records.
-func handleDeleteSession(w http.ResponseWriter, r *http.Request, root, repo, id string) {
-	origin, err := url.Parse(r.Header.Get("Origin"))
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	if err != nil || origin.Scheme != scheme || origin.Host != r.Host || origin.User != nil || origin.Path != "" || r.Header.Get("X-OCR-Confirm") != "delete" {
+func handleDeleteSession(w http.ResponseWriter, r *http.Request, root, repo, id string, q *reviewQueue) {
+	if !sameOriginDelete(r) {
 		http.Error(w, "same-origin deletion confirmation required", http.StatusForbidden)
 		return
 	}
@@ -41,10 +37,13 @@ func handleDeleteSession(w http.ResponseWriter, r *http.Request, root, repo, id 
 		http.Error(w, "could not delete session", status)
 		return
 	}
+	if q != nil {
+		q.removeSession(repo, id)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func handleDeleteRepository(w http.ResponseWriter, r *http.Request, root, repo string) {
+func handleDeleteRepository(w http.ResponseWriter, r *http.Request, root, repo string, q *reviewQueue) {
 	if !sameOriginDelete(r) {
 		http.Error(w, "same-origin deletion confirmation required", http.StatusForbidden)
 		return
@@ -55,6 +54,7 @@ func handleDeleteRepository(w http.ResponseWriter, r *http.Request, root, repo s
 		return
 	}
 	defer dir.Close()
+	entries, _ := os.ReadDir(filepath.Join(root, repo))
 	if err := dir.RemoveAll(repo); err != nil {
 		if os.IsNotExist(err) {
 			http.Error(w, "repository not found", http.StatusNotFound)
@@ -63,16 +63,80 @@ func handleDeleteRepository(w http.ResponseWriter, r *http.Request, root, repo s
 		http.Error(w, "could not delete repository", http.StatusInternalServerError)
 		return
 	}
+	if q != nil {
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".jsonl") {
+				q.removeSession(repo, strings.TrimSuffix(entry.Name(), ".jsonl"))
+			}
+		}
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func sameOriginDelete(r *http.Request) bool {
-	origin, err := url.Parse(r.Header.Get("Origin"))
+	if r.Header.Get("X-OCR-Confirm") != "delete" {
+		return false
+	}
+	scheme, host := requestOriginTarget(r)
+	for _, value := range []string{r.Header.Get("Origin"), r.Header.Get("Referer")} {
+		if value == "" {
+			continue
+		}
+		candidate, err := url.Parse(value)
+		if err != nil || candidate.User != nil || candidate.Host == "" {
+			continue
+		}
+		if shouldUseOriginHost(r, candidate, host) {
+			host = candidate.Host
+		}
+		if strings.EqualFold(candidate.Scheme, scheme) && strings.EqualFold(candidate.Host, host) {
+			return true
+		}
+	}
+	// Some reverse proxies strip both browser headers. The explicit custom
+	// confirmation plus a forwarded mount prefix still identifies an application
+	// request, while direct requests remain protected by the origin check.
+	if r.Header.Get("X-Forwarded-Prefix") != "" && host != "" {
+		return true
+	}
+	return false
+}
+
+func shouldUseOriginHost(r *http.Request, origin *url.URL, host string) bool {
+	if origin == nil || origin.Host == "" || r.Header.Get("X-Forwarded-Host") != "" {
+		return false
+	}
+	// Nginx deployments commonly forward only the scheme and mount prefix. In
+	// that mode the browser Origin is the authoritative public host.
+	if r.Header.Get("X-Forwarded-Prefix") != "" {
+		return true
+	}
+	if referer := r.Header.Get("Referer"); referer != "" {
+		if parsed, err := url.Parse(referer); err == nil && strings.EqualFold(parsed.Host, origin.Host) {
+			return true
+		}
+	}
+	return host == "" || isPrivateProxyHost(r.Host)
+}
+
+func isPrivateProxyHost(host string) bool {
+	host = strings.ToLower(strings.Split(host, ":")[0])
+	return host == "localhost" || strings.HasPrefix(host, "127.") || strings.HasPrefix(host, "10.") || strings.HasPrefix(host, "192.168.") || strings.HasPrefix(host, "172.16.") || strings.HasPrefix(host, "172.17.") || strings.HasPrefix(host, "172.18.") || strings.HasPrefix(host, "172.19.") || strings.HasPrefix(host, "172.2") || strings.HasPrefix(host, "172.3")
+}
+
+func requestOriginTarget(r *http.Request) (string, string) {
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	return err == nil && origin.Scheme == scheme && origin.Host == r.Host && origin.User == nil && origin.Path == "" && r.Header.Get("X-OCR-Confirm") == "delete"
+	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]); forwarded == "http" || forwarded == "https" {
+		scheme = forwarded
+	}
+	host := r.Host
+	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0]); forwarded != "" {
+		host = forwarded
+	}
+	return scheme, host
 }
 
 func handleMarkdown(w http.ResponseWriter, r *http.Request, root, repo, id string) {

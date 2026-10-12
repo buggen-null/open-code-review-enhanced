@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alibaba/open-code-review/internal/model"
@@ -204,18 +205,53 @@ func ListSessions(root, encodedRepo string) ([]SessionSummary, error) {
 		return nil, fmt.Errorf("read repo dir: %w", err)
 	}
 
-	var summaries []SessionSummary
+	type sessionResult struct {
+		index   int
+		summary SessionSummary
+		err     error
+	}
+	paths := make([]string, 0, len(entries))
 	for _, e := range entries {
 		if !strings.HasSuffix(e.Name(), ".jsonl") {
 			continue
 		}
-		sessionID := strings.TrimSuffix(e.Name(), ".jsonl")
-		s, err := peekSession(filepath.Join(repoDir, e.Name()))
-		if err != nil {
-			continue // skip unreadable files
+		paths = append(paths, filepath.Join(repoDir, e.Name()))
+	}
+	// A session file can contain the full review trace and be very large. Read
+	// independent sessions concurrently so one large history does not block the
+	// whole repository page behind a serial disk scan.
+	results := make(chan sessionResult, len(paths))
+	workers := min(len(paths), 8)
+	var wg sync.WaitGroup
+	jobs := make(chan int)
+	for worker := 0; worker < workers; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for index := range jobs {
+				summary, parseErr := peekSession(paths[index])
+				results <- sessionResult{index: index, summary: summary, err: parseErr}
+			}
+		}()
+	}
+	go func() {
+		for index := range paths {
+			jobs <- index
 		}
-		s.SessionID = sessionID
-		summaries = append(summaries, s)
+		close(jobs)
+		wg.Wait()
+		close(results)
+	}()
+	parsed := make([]sessionResult, 0, len(paths))
+	for result := range results {
+		if result.err == nil {
+			result.summary.SessionID = strings.TrimSuffix(filepath.Base(paths[result.index]), ".jsonl")
+			parsed = append(parsed, result)
+		}
+	}
+	summaries := make([]SessionSummary, 0, len(parsed))
+	for _, result := range parsed {
+		summaries = append(summaries, result.summary)
 	}
 
 	// Timestamp alone is not a total order: two sessions can share one

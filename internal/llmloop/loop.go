@@ -777,7 +777,11 @@ func (r *Runner) executeToolCall(ctx context.Context, taskKey string, call llm.T
 				rec.AddToolResult(t.Name(), call.Function.Arguments, "(async)")
 			}
 			pool := r.deps.CommentWorkerPool
-			asyncCtx := context.WithoutCancel(ctx)
+			// Post-processing belongs to the current review subtask. It must
+			// observe the same timeout/cancellation as the main loop; otherwise
+			// AwaitKey can wait forever on a locator or attribution request after
+			// the subtask has already timed out.
+			asyncCtx := ctx
 			toolName := t.Name()
 			pool.SubmitFor(taskKey, func() ([]model.LlmComment, error) {
 				defer func() {

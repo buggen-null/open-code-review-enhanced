@@ -98,9 +98,7 @@ func handleRepos(w http.ResponseWriter, r *http.Request, root string) {
 		return
 	}
 
-	renderTemplate(w, "repos.html", map[string]any{
-		"Repos": repos,
-	})
+	renderTemplate(w, "repos.html", map[string]any{"Repos": repos})
 }
 
 type sessionsData struct {
@@ -282,11 +280,12 @@ func handleCompareFormat(w http.ResponseWriter, r *http.Request, root, repo stri
 		return
 	}
 
-	// Same call shape as the CLI: one reviewed-path set, from the after side.
+	// Same call shape as the CLI: the after manifest supplies reviewed paths and
+	// old-to-new mappings for renamed files.
 	result := session.Compare(
 		toLlmComments(bv.Comments),
 		toLlmComments(av.Comments),
-		session.ReviewedPaths(av.Summary.RunManifest),
+		av.Summary.RunManifest,
 	)
 
 	name := filepath.Base(av.Summary.CWD)

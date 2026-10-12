@@ -155,9 +155,7 @@ func (w *prefixResponseWriter) flush() {
 	contentType := w.header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "text/html") {
 		body := string(w.body)
-		for _, attribute := range []string{`href="/`, `src="/`, `action="/`} {
-			body = strings.ReplaceAll(body, attribute, attribute[:len(attribute)-1]+w.prefix+"/")
-		}
+		body = prefixRootRelativeURLs(body, w.prefix)
 		w.body = []byte(body)
 	}
 	for key, values := range w.header {
@@ -168,6 +166,32 @@ func (w *prefixResponseWriter) flush() {
 		w.dst.WriteHeader(w.status)
 	}
 	_, _ = w.dst.Write(w.body)
+}
+
+func prefixRootRelativeURLs(body, prefix string) string {
+	for _, attribute := range []string{
+		`href="/`, `src="/`, `action="/`,
+		`data-delete-session="/`, `data-delete-repository="/`,
+		`data-progress-url="/`, `data-return-url="/`,
+	} {
+		needle := attribute
+		replacement := attribute[:len(attribute)-1] + prefix + "/"
+		for start := 0; ; {
+			i := strings.Index(body[start:], needle)
+			if i < 0 {
+				break
+			}
+			i += start
+			pathStart := i + len(needle)
+			if strings.HasPrefix(body[pathStart:], strings.TrimPrefix(prefix, "/")+"/") {
+				start = pathStart
+				continue
+			}
+			body = body[:i] + replacement + body[pathStart:]
+			start = i + len(replacement)
+		}
+	}
+	return body
 }
 
 // newMux builds method-qualified document and action routes. Only the explicit
@@ -257,7 +281,7 @@ func newMux(root string) *http.ServeMux {
 			http.Error(w, "invalid repo path", http.StatusBadRequest)
 			return
 		}
-		handleDeleteRepository(w, r, root, repo)
+		handleDeleteRepository(w, r, root, repo, queue)
 	})
 	// Registered before the {sessionID} wildcard for readability only: a
 	// literal segment wins over a wildcard whatever the order.
@@ -301,7 +325,6 @@ func newMux(root string) *http.ServeMux {
 		"GET /r/{repo}/{sessionID}/export": func(w http.ResponseWriter, r *http.Request, root, repo, id string) {
 			handleSessionExport(w, r, root, repo, id, r.URL.Query().Get("format"))
 		},
-		"DELETE /r/{repo}/{sessionID}/delete": handleDeleteSession,
 	} {
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 			repo, id := r.PathValue("repo"), r.PathValue("sessionID")
@@ -312,6 +335,14 @@ func newMux(root string) *http.ServeMux {
 			handler(w, r, root, repo, id)
 		})
 	}
+	mux.HandleFunc("DELETE /r/{repo}/{sessionID}/delete", func(w http.ResponseWriter, r *http.Request) {
+		repo, id := r.PathValue("repo"), r.PathValue("sessionID")
+		if unsafeSegment(repo) || unsafeSegment(id) {
+			http.Error(w, "invalid path", http.StatusBadRequest)
+			return
+		}
+		handleDeleteSession(w, r, root, repo, id, queue)
+	})
 	return mux
 }
 

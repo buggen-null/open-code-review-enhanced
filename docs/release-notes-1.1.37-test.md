@@ -1,0 +1,1 @@
+# v1.1.37-test`n`n- Prefix browser mutation and progress URLs for Nginx subpath deployments.`n- Keep table action columns as real frozen table cells.`n- Cancel and remove tasks when their session or repository is deleted, even before a session ID is returned.
