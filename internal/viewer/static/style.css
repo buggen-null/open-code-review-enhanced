@@ -1643,7 +1643,7 @@ p {
 }
 
 .sessions-page .table td {
-    vertical-align: top;
+    vertical-align: middle;
 }
 
 .sessions-page .table th.col-action {
@@ -1884,7 +1884,7 @@ nav.breadcrumb a:focus-visible {
 }
 
 .repos-page .table td {
-    vertical-align: top;
+    vertical-align: middle;
 }
 
 .repos-page .table-scroll {
@@ -2135,7 +2135,7 @@ nav.breadcrumb a:focus-visible {
     z-index: 2;
     background: var(--surface);
     background-clip: padding-box;
-    border-left: 1px solid var(--border-subtle);
+    border-left: none;
 }
 .sessions-page .table,
 .repos-page .table,
@@ -2146,6 +2146,7 @@ nav.breadcrumb a:focus-visible {
 .repos-page .table td.col-action,
 .tasks-page .table td.task-actions {
     display: table-cell;
+    vertical-align: middle;
 }
 .sessions-page .col-action { min-width: 13rem; }
 .repos-page .col-action { min-width: 10rem; }
